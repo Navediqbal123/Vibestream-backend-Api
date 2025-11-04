@@ -3,7 +3,7 @@ import fetch from "node-fetch";
 import cors from "cors";
 import dotenv from "dotenv";
 import { collection, addDoc } from "firebase/firestore";
-import { db } from "./firebase.js"; // ✅ import your Firebase setup
+import { db } from "./firebase.js"; // ✅ your existing firebase config
 
 dotenv.config();
 const app = express();
@@ -12,7 +12,7 @@ app.use(express.json());
 
 // ✅ Default route test
 app.get("/", (req, res) => {
-  res.send("Vibestream Backend is Live 🚀");
+  res.send("🔥 Vibestream Backend + Firebase Connected Successfully!");
 });
 
 // ✅ YouTube video info fetch + Firestore save route
@@ -22,6 +22,10 @@ app.get("/api/video", async (req, res) => {
     if (!id) return res.status(400).json({ error: "Video ID required" });
 
     const API_KEY = process.env.YT_API_KEY;
+    if (!API_KEY) {
+      return res.status(500).json({ error: "Missing YT_API_KEY in .env" });
+    }
+
     const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${id}&key=${API_KEY}`;
     const response = await fetch(url);
     const data = await response.json();
@@ -41,21 +45,23 @@ app.get("/api/video", async (req, res) => {
       createdAt: new Date().toISOString(),
     };
 
-    // ✅ Save to Firestore
+    // ✅ Save to Firestore collection "videos"
     await addDoc(collection(db, "videos"), videoData);
 
-    res.json({ message: "Video fetched & saved!", video: videoData });
+    res.json({ message: "✅ Video fetched & saved successfully!", video: videoData });
   } catch (error) {
-    console.error("Error fetching video:", error);
-    res.status(500).json({ error: "Server error" });
+    console.error("❌ Error fetching video:", error);
+    res.status(500).json({ error: "Server error, please try again later" });
   }
 });
 
-// ✅ 404 fallback route
+// ✅ Fallback route for undefined endpoints
 app.use((req, res) => {
   res.status(404).json({ error: "Route not found" });
 });
 
-// ✅ Start server
+// ✅ Start server (Render compatible)
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✅ Vibestream Backend running on port ${PORT}`));
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Vibestream Backend running on port ${PORT}`);
+});

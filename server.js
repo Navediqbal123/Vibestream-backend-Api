@@ -2,6 +2,8 @@ import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
 import dotenv from "dotenv";
+import { collection, addDoc } from "firebase/firestore";
+import { db } from "./firebase.js"; // ✅ import your Firebase setup
 
 dotenv.config();
 const app = express();
@@ -13,7 +15,7 @@ app.get("/", (req, res) => {
   res.send("Vibestream Backend is Live 🚀");
 });
 
-// ✅ YouTube video info fetch route
+// ✅ YouTube video info fetch + Firestore save route
 app.get("/api/video", async (req, res) => {
   try {
     const { id } = req.query;
@@ -28,14 +30,21 @@ app.get("/api/video", async (req, res) => {
       return res.status(404).json({ error: "Video not found" });
     }
 
-    res.json({
+    const videoData = {
       title: data.items[0].snippet.title,
       thumbnail: data.items[0].snippet.thumbnails.high.url,
       channel: data.items[0].snippet.channelTitle,
       views: data.items[0].statistics.viewCount,
       likes: data.items[0].statistics.likeCount,
       description: data.items[0].snippet.description,
-    });
+      videoId: id,
+      createdAt: new Date().toISOString(),
+    };
+
+    // ✅ Save to Firestore
+    await addDoc(collection(db, "videos"), videoData);
+
+    res.json({ message: "Video fetched & saved!", video: videoData });
   } catch (error) {
     console.error("Error fetching video:", error);
     res.status(500).json({ error: "Server error" });
@@ -47,6 +56,6 @@ app.use((req, res) => {
   res.status(404).json({ error: "Route not found" });
 });
 
-// ✅ Server start
+// ✅ Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Vibestream Backend running on port ${PORT}`));

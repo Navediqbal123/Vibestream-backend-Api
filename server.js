@@ -26,7 +26,8 @@ app.get("/api/video", async (req, res) => {
       return res.status(500).json({ error: "Missing YT_API_KEY in .env" });
     }
 
-    const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${id}&key=${API_KEY}`;
+    // ✅ Added `contentDetails` part in the request
+    const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${id}&key=${API_KEY}`;
     const response = await fetch(url);
     const data = await response.json();
 

@@ -90,7 +90,6 @@ app.get("/api/video", async (req, res) => {
 });
 
 // Home feed (latest shorts) with cursor pagination
-// /feed?limit=20&cursor=timestampNumber
 app.get("/feed", async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 20, 50);
@@ -125,7 +124,6 @@ app.get("/trending", async (req, res) => {
     const region = (req.query.region || "IN").toUpperCase();
     const maxResults = Math.min(Number(req.query.limit) || 20, 50);
 
-    // search API for shorts: order by viewCount, recent 48h
     const publishedAfter = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
     const url = `${YT_BASE}/search?part=snippet&type=video&videoDuration=short&order=viewCount&regionCode=${region}&maxResults=${maxResults}&publishedAfter=${publishedAfter}&key=${YT_API_KEY}`;
     const r = await fetch(url);
@@ -135,7 +133,6 @@ app.get("/trending", async (req, res) => {
     const details = await enrichDetails(ids);
 
     const list = ids.map(id => mapVideoItem(details[id] || { id, snippet: {} }));
-    // upsert in background
     await Promise.all(list.map(v => upsertVideo(v)));
 
     res.json({ items: list });
@@ -145,8 +142,7 @@ app.get("/trending", async (req, res) => {
   }
 });
 
-// Manual fetch (topics/keywords) — for admin or quick seed
-// POST /fetch/shorts  { keywords?: string[], region?: "IN", limit?: 25 }
+// Manual fetch (topics/keywords)
 app.post("/fetch/shorts", async (req, res) => {
   try {
     const {
@@ -167,7 +163,6 @@ app.post("/fetch/shorts", async (req, res) => {
       collected.push(...pack);
     }
 
-    // de-dup by videoId
     const dedupMap = new Map();
     for (const v of collected) dedupMap.set(v.videoId, v);
     const finalList = Array.from(dedupMap.values()).slice(0, 30);
@@ -180,8 +175,31 @@ app.post("/fetch/shorts", async (req, res) => {
   }
 });
 
-// ---------- CRON (auto every 6 hours) ----------
-const CRON_SCHEDULE = process.env.CRON_SCHEDULE || "0 */6 * * *"; // every 6h
+// ✅ Added GET route for testing /fetch/shorts from browser
+app.get("/fetch/shorts", async (req, res) => {
+  try {
+    const body = {
+      keywords: ["trending shorts", "funny shorts", "tech shorts", "news shorts"],
+      region: "IN",
+      limit: 25
+    };
+
+    const r = await fetch("https://vibestream-backend-api.onrender.com/fetch/shorts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+
+    const j = await r.json();
+    res.json(j);
+  } catch (e) {
+    console.error("GET /fetch/shorts error:", e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ---------- CRON ----------
+const CRON_SCHEDULE = process.env.CRON_SCHEDULE || "0 */6 * * *";
 const AUTO_KEYWORDS = [
   "trending shorts", "viral shorts", "music shorts",
   "funny shorts", "sports shorts", "gaming shorts",
@@ -191,7 +209,7 @@ const AUTO_KEYWORDS = [
 async function autoFetch() {
   try {
     console.log("⏱️ AutoFetch started…");
-    const regions = ["IN", "US", "GB"]; // India + Global mix
+    const regions = ["IN", "US", "GB"];
     for (const region of regions) {
       const body = { keywords: AUTO_KEYWORDS, region, limit: 25 };
       const url = `${YT_BASE}/search?part=snippet&type=video&videoDuration=short&order=date&regionCode=${region}&maxResults=25&q=${encodeURIComponent(AUTO_KEYWORDS.join(" | "))}&key=${YT_API_KEY}`;

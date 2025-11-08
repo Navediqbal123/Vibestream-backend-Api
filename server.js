@@ -12,8 +12,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ---------- Config ----------
 const PORT = process.env.PORT || 3000;
-const YT_API_KEY = process.env.YT_API_KEY;
+const YT_API_KEY = process.env.YT_API_KEY || process.env.YOUTUBE_API_KEY;
 
 // ---------- Supabase Setup ----------
 const supabase = createClient(
@@ -21,19 +22,14 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// ---------- helpers ----------
+// ---------- Helpers ----------
 const YT_BASE = "https://www.googleapis.com/youtube/v3";
 
-// Safe insert/update (no duplicates)
 async function upsertVideo(v) {
-  const { error } = await supabase
-    .from("videos")
-    .upsert(v, { onConflict: "videoId" });
-
+  const { error } = await supabase.from("videos").upsert(v, { onConflict: "videoId" });
   if (error) console.error("❌ Supabase upsert error:", error.message);
 }
 
-// extract short record from videos.list item
 function mapVideoItem(item) {
   const id = item.id?.videoId || item.id;
   const sn = item.snippet || {};
@@ -57,11 +53,10 @@ function mapVideoItem(item) {
     views: st.viewCount ? Number(st.viewCount) : null,
     likes: st.likeCount ? Number(st.likeCount) : null,
     isShort: true,
-    created_at: new Date().toISOString(), // ✅ fixed field name
+    created_at: new Date().toISOString(), // ✅ correct field name
   };
 }
 
-// fetch videos.details for stats/enrichment
 async function enrichDetails(videoIds) {
   if (!videoIds.length) return {};
   const url = `${YT_BASE}/videos?part=snippet,contentDetails,statistics&id=${videoIds.join(
@@ -74,20 +69,19 @@ async function enrichDetails(videoIds) {
   return map;
 }
 
-// ---------- routes ----------
+// ---------- Routes ----------
 app.get("/", (_req, res) => {
-  res.send("🔥 Vibestream Backend (Supabase) — Endpoints: /feed /trending /fetch/shorts");
+  res.send("🔥 Vibestream Backend — Endpoints: /feed /trending /fetch/shorts");
 });
 
-// Home feed (latest shorts)
+// Feed (latest shorts)
 app.get("/feed", async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 20, 50);
-
     const { data, error } = await supabase
       .from("videos")
       .select("*")
-      .order("created_at", { ascending: false }) // ✅ fixed
+      .order("created_at", { ascending: false })
       .limit(limit);
 
     if (error) return res.status(500).json({ error: error.message });
@@ -98,7 +92,7 @@ app.get("/feed", async (req, res) => {
   }
 });
 
-// Trending shorts (region wise)
+// Trending (auto fetch from YouTube)
 app.get("/trending", async (req, res) => {
   try {
     const region = (req.query.region || "IN").toUpperCase();
@@ -122,7 +116,7 @@ app.get("/trending", async (req, res) => {
   }
 });
 
-// Manual fetch (topics/keywords)
+// Manual YouTube fetch
 app.post("/fetch/shorts", async (req, res) => {
   try {
     const {
@@ -160,7 +154,7 @@ app.post("/fetch/shorts", async (req, res) => {
   }
 });
 
-// ---------- CRON ----------
+// ---------- Cron (Auto fetch every 6 hrs) ----------
 const CRON_SCHEDULE = process.env.CRON_SCHEDULE || "0 */6 * * *";
 const AUTO_KEYWORDS = [
   "trending shorts",
@@ -179,7 +173,6 @@ async function autoFetch() {
     console.log("⏱️ AutoFetch started…");
     const regions = ["IN", "US", "GB"];
     for (const region of regions) {
-      const body = { keywords: AUTO_KEYWORDS, region, limit: 25 };
       const url = `${YT_BASE}/search?part=snippet&type=video&videoDuration=short&order=date&regionCode=${region}&maxResults=25&q=${encodeURIComponent(
         AUTO_KEYWORDS.join(" | ")
       )}&key=${YT_API_KEY}`;
@@ -205,7 +198,7 @@ cron.schedule(CRON_SCHEDULE, autoFetch, { timezone: "UTC" });
 // ---------- 404 ----------
 app.use((req, res) => res.status(404).json({ error: "Route not found" }));
 
-// ---------- start ----------
+// ---------- Start ----------
 app.listen(PORT, "0.0.0.0", () =>
-  console.log(`🚀 Vibestream Backend running on ${PORT}`)
+  console.log(`🚀 Vibestream Backend running on port ${PORT}`)
 );

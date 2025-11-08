@@ -57,7 +57,7 @@ function mapVideoItem(item) {
     views: st.viewCount ? Number(st.viewCount) : null,
     likes: st.likeCount ? Number(st.likeCount) : null,
     isShort: true,
-    createdAt: Date.now(),
+    created_at: new Date().toISOString(), // ✅ fixed field name
   };
 }
 
@@ -87,7 +87,7 @@ app.get("/feed", async (req, res) => {
     const { data, error } = await supabase
       .from("videos")
       .select("*")
-      .order("createdAt", { ascending: false })
+      .order("created_at", { ascending: false }) // ✅ fixed
       .limit(limit);
 
     if (error) return res.status(500).json({ error: error.message });

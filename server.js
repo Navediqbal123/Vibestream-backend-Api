@@ -12,15 +12,35 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ---------- Global Error Handlers ----------
+process.on("uncaughtException", (err) => {
+  console.error("💥 Uncaught Exception:", err);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("💥 Unhandled Rejection at:", promise, "reason:", reason);
+});
+
+// ---------- Logging Middleware ----------
+app.use((req, res, next) => {
+  console.log(`➡️ Request: ${req.method} ${req.url}`);
+  next();
+});
+
 // ---------- Config ----------
 const PORT = process.env.PORT || 3000;
 const YT_API_KEY = process.env.YT_API_KEY || process.env.YOUTUBE_API_KEY;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+// ✅ Debug log: env check (will not print sensitive keys)
+console.log("🧩 Environment check:");
+console.log("SUPABASE_URL:", SUPABASE_URL ? "✅ Found" : "❌ Missing");
+console.log("SUPABASE_SERVICE_ROLE_KEY:", SUPABASE_KEY ? "✅ Found" : "❌ Missing");
+console.log("YOUTUBE_API_KEY:", YT_API_KEY ? "✅ Found" : "❌ Missing");
 
 // ---------- Supabase Setup ----------
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ---------- Helpers ----------
 const YT_BASE = "https://www.googleapis.com/youtube/v3";
@@ -62,8 +82,10 @@ async function enrichDetails(videoIds) {
   const url = `${YT_BASE}/videos?part=snippet,contentDetails,statistics&id=${videoIds.join(
     ","
   )}&key=${YT_API_KEY}`;
+  console.log("📡 Fetching video details:", url);
   const r = await fetch(url);
   const j = await r.json();
+  if (j.error) console.error("❌ YouTube detail API error:", j.error);
   const map = {};
   (j.items || []).forEach((it) => (map[it.id] = it));
   return map;
@@ -84,11 +106,11 @@ app.get("/feed", async (req, res) => {
       .order("created_at", { ascending: false })
       .limit(limit);
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) throw new Error(error.message);
     res.json({ items: data });
   } catch (e) {
-    console.error("/feed error:", e);
-    res.status(500).json({ error: "Server error" });
+    console.error("🔥 /feed error:", e);
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -107,6 +129,11 @@ app.get("/trending", async (req, res) => {
     const r = await fetch(url);
     const j = await r.json();
 
+    if (j.error) {
+      console.error("❌ YouTube API error:", j.error);
+      return res.status(500).json({ error: j.error.message });
+    }
+
     console.log("🎬 YouTube items found:", (j.items || []).length);
 
     const ids = (j.items || []).map((i) => i.id.videoId).filter(Boolean);
@@ -123,8 +150,8 @@ app.get("/trending", async (req, res) => {
 
     res.json({ items: list });
   } catch (e) {
-    console.error("/trending error:", e);
-    res.status(500).json({ error: "Server error" });
+    console.error("🔥 /trending error:", e);
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -151,6 +178,8 @@ app.post("/fetch/shorts", async (req, res) => {
       const r = await fetch(url);
       const j = await r.json();
 
+      if (j.error) console.error("❌ YouTube API error (manual):", j.error);
+
       const ids = (j.items || []).map((i) => i.id.videoId).filter(Boolean);
       const details = await enrichDetails(ids);
       const pack = ids.map((id) => mapVideoItem(details[id] || { id, snippet: {} }));
@@ -166,8 +195,8 @@ app.post("/fetch/shorts", async (req, res) => {
 
     res.json({ added: finalList.length });
   } catch (e) {
-    console.error("/fetch/shorts error:", e);
-    res.status(500).json({ error: "Server error" });
+    console.error("🔥 /fetch/shorts error:", e);
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -196,6 +225,7 @@ async function autoFetch() {
       )}&key=${YT_API_KEY}`;
       const r = await fetch(url);
       const j = await r.json();
+      if (j.error) console.error("❌ YouTube AutoFetch API error:", j.error);
       const ids = (j.items || []).map((i) => i.id.videoId).filter(Boolean);
       const details = await enrichDetails(ids);
       const pack = ids.map((id) => mapVideoItem(details[id] || { id, snippet: {} }));
@@ -207,7 +237,7 @@ async function autoFetch() {
     }
     console.log("⏱️ AutoFetch done.");
   } catch (e) {
-    console.error("AutoFetch error:", e);
+    console.error("🔥 AutoFetch error:", e);
   }
 }
 

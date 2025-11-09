@@ -15,20 +15,22 @@ const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || "";
 const YT_API_KEY = process.env.YT_API_KEY || process.env.YOUTUBE_API_KEY || "";
 
-console.log("STARTUP: env presence:");
-console.log(" SUPABASE_URL:", SUPABASE_URL ? "FOUND" : "MISSING");
-console.log(" SUPABASE_KEY:", SUPABASE_KEY ? "FOUND" : "MISSING");
-console.log(" YT_API_KEY:", YT_API_KEY ? "FOUND" : "MISSING");
+console.log("🚀 STARTUP: Checking environment variables...");
+console.log(" SUPABASE_URL:", SUPABASE_URL ? "FOUND ✅" : "MISSING ❌");
+console.log(" SUPABASE_KEY:", SUPABASE_KEY ? "FOUND ✅" : "MISSING ❌");
+console.log(" YT_API_KEY:", YT_API_KEY ? "FOUND ✅" : "MISSING ❌");
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// simple logger
+// Simple logger
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} --> ${req.method} ${req.url}`);
   next();
 });
 
-app.get("/", (_req, res) => res.send("Diag server live — endpoints: /env /ping /test-youtube /test-supabase /feed"));
+app.get("/", (_req, res) => 
+  res.send("Diag server live — endpoints: /env /ping /test-youtube /test-supabase /feed")
+);
 
 /* 1) /env -> shows which env vars are present (does NOT print secrets) */
 app.get("/env", (_req, res) => {
@@ -49,12 +51,14 @@ app.get("/test-youtube", async (req, res) => {
   try {
     const q = encodeURIComponent("trending shorts");
     const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoDuration=short&maxResults=5&q=${q}&key=${YT_API_KEY}`;
+    console.log("📡 Fetching YouTube from:", url);
     const r = await fetch(url);
     const j = await r.json();
+    console.log("📦 YouTube raw response:", JSON.stringify(j, null, 2));
     if (j.error) return res.status(500).json({ error: j.error });
     return res.json({ items: (j.items || []).length, sample: j.items?.[0]?.id || null });
   } catch (e) {
-    console.error("test-youtube error", e);
+    console.error("❌ test-youtube error", e);
     res.status(500).json({ error: String(e) });
   }
 });
@@ -64,6 +68,7 @@ app.get("/test-supabase", async (req, res) => {
   if (!SUPABASE_URL || !SUPABASE_KEY)
     return res.status(400).json({ error: "Supabase URL or Key missing" });
   try {
+    console.log("🧩 Testing Supabase connection:", SUPABASE_URL);
     const { data, error, count } = await supabase
       .from("videos")
       .select("id", { count: "exact", head: false })
@@ -71,7 +76,7 @@ app.get("/test-supabase", async (req, res) => {
     if (error) return res.status(500).json({ error: error.message });
     res.json({ ok: true, sampleCount: data?.length ?? 0, totalCount: count ?? null });
   } catch (e) {
-    console.error("test-supabase error", e);
+    console.error("❌ test-supabase error", e);
     res.status(500).json({ error: String(e) });
   }
 });
@@ -79,6 +84,7 @@ app.get("/test-supabase", async (req, res) => {
 /* 5) /feed -> returns videos from supabase (same as your frontend expects) */
 app.get("/feed", async (req, res) => {
   try {
+    console.log("🎬 Fetching latest videos from Supabase...");
     const limit = Math.min(Number(req.query.limit) || 20, 50);
     const { data, error } = await supabase
       .from("videos")
@@ -88,7 +94,7 @@ app.get("/feed", async (req, res) => {
     if (error) return res.status(500).json({ error: error.message });
     return res.json({ items: data || [] });
   } catch (e) {
-    console.error("/feed error", e);
+    console.error("❌ /feed error", e);
     res.status(500).json({ error: String(e) });
   }
 });
@@ -96,4 +102,4 @@ app.get("/feed", async (req, res) => {
 /* generic 404 */
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
 
-app.listen(PORT, "0.0.0.0", () => console.log(`Diag server listening on ${PORT}`));
+app.listen(PORT, "0.0.0.0", () => console.log(`✅ Diag server listening on ${PORT}`));

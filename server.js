@@ -1,4 +1,4 @@
-// server.js — diagnostic server for debugging Render/Supabase/YouTube
+// server.js — final working version for Vibestream Backend
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
@@ -12,7 +12,10 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || "";
+const SUPABASE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  "";
 const YT_API_KEY = process.env.YT_API_KEY || process.env.YOUTUBE_API_KEY || "";
 
 console.log("🚀 STARTUP: Checking environment variables...");
@@ -22,17 +25,17 @@ console.log(" YT_API_KEY:", YT_API_KEY ? "FOUND ✅" : "MISSING ❌");
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Simple logger
+// 🔹 Middleware logger
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} --> ${req.method} ${req.url}`);
   next();
 });
 
-app.get("/", (_req, res) => 
-  res.send("Diag server live — endpoints: /env /ping /test-youtube /test-supabase /feed")
+app.get("/", (_req, res) =>
+  res.send("🔥 Vibestream backend is live — endpoints: /env /ping /feed /trending")
 );
 
-/* 1) /env -> shows which env vars are present (does NOT print secrets) */
+/* 1️⃣ /env -> check environment variables */
 app.get("/env", (_req, res) => {
   res.json({
     SUPABASE_URL: !!SUPABASE_URL,
@@ -42,64 +45,74 @@ app.get("/env", (_req, res) => {
   });
 });
 
-/* 2) /ping -> simple health */
-app.get("/ping", (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
+/* 2️⃣ /ping -> health check */
+app.get("/ping", (_req, res) =>
+  res.json({ ok: true, time: new Date().toISOString() })
+);
 
-/* 3) /test-youtube -> tries a YouTube search, returns count or error */
-app.get("/test-youtube", async (req, res) => {
-  if (!YT_API_KEY) return res.status(400).json({ error: "YT_API_KEY missing" });
-  try {
-    const q = encodeURIComponent("trending shorts");
-    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoDuration=short&maxResults=5&q=${q}&key=${YT_API_KEY}`;
-    console.log("📡 Fetching YouTube from:", url);
-    const r = await fetch(url);
-    const j = await r.json();
-    console.log("📦 YouTube raw response:", JSON.stringify(j, null, 2));
-    if (j.error) return res.status(500).json({ error: j.error });
-    return res.json({ items: (j.items || []).length, sample: j.items?.[0]?.id || null });
-  } catch (e) {
-    console.error("❌ test-youtube error", e);
-    res.status(500).json({ error: String(e) });
-  }
-});
-
-/* 4) /test-supabase -> tries a trivial select from videos table */
-app.get("/test-supabase", async (req, res) => {
-  if (!SUPABASE_URL || !SUPABASE_KEY)
-    return res.status(400).json({ error: "Supabase URL or Key missing" });
-  try {
-    console.log("🧩 Testing Supabase connection:", SUPABASE_URL);
-    const { data, error, count } = await supabase
-      .from("videos")
-      .select("id", { count: "exact", head: false })
-      .limit(1);
-    if (error) return res.status(500).json({ error: error.message });
-    res.json({ ok: true, sampleCount: data?.length ?? 0, totalCount: count ?? null });
-  } catch (e) {
-    console.error("❌ test-supabase error", e);
-    res.status(500).json({ error: String(e) });
-  }
-});
-
-/* 5) /feed -> returns videos from supabase (same as your frontend expects) */
+/* 3️⃣ /feed -> latest videos from Supabase */
 app.get("/feed", async (req, res) => {
   try {
-    console.log("🎬 Fetching latest videos from Supabase...");
     const limit = Math.min(Number(req.query.limit) || 20, 50);
     const { data, error } = await supabase
       .from("videos")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(limit);
-    if (error) return res.status(500).json({ error: error.message });
-    return res.json({ items: data || [] });
+    if (error) throw error;
+    res.json({ items: data || [] });
   } catch (e) {
-    console.error("❌ /feed error", e);
-    res.status(500).json({ error: String(e) });
+    console.error("❌ /feed error:", e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 
-/* generic 404 */
-app.use((req, res) => res.status(404).json({ error: "Not found" }));
+/* 4️⃣ /trending -> fetch trending shorts from YouTube */
+app.get("/trending", async (req, res) => {
+  try {
+    if (!YT_API_KEY) throw new Error("YT_API_KEY missing");
 
-app.listen(PORT, "0.0.0.0", () => console.log(`✅ Diag server listening on ${PORT}`));
+    const region = (req.query.region || "IN").toUpperCase();
+    const q = encodeURIComponent("trending shorts");
+    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoDuration=short&maxResults=10&regionCode=${region}&q=${q}&key=${YT_API_KEY}`;
+
+    console.log("📡 Fetching trending from:", url);
+    const r = await fetch(url);
+    const j = await r.json();
+
+    if (j.error) throw new Error(j.error.message);
+    const items = (j.items || []).map((v) => ({
+      videoId: v.id.videoId,
+      title: v.snippet.title,
+      channel: v.snippet.channelTitle,
+      thumbnail: v.snippet.thumbnails?.high?.url,
+      publishedAt: v.snippet.publishedAt,
+    }));
+
+    res.json({ count: items.length, items });
+  } catch (e) {
+    console.error("❌ /trending error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* 5️⃣ /test-supabase -> test database connection */
+app.get("/test-supabase", async (req, res) => {
+  try {
+    const { data, error, count } = await supabase
+      .from("videos")
+      .select("id", { count: "exact" })
+      .limit(1);
+    if (error) throw error;
+    res.json({ ok: true, sampleCount: data?.length || 0, totalCount: count });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* 404 fallback */
+app.use((req, res) => res.status(404).json({ error: "Route not found" }));
+
+app.listen(PORT, "0.0.0.0", () =>
+  console.log(`✅ Vibestream backend running on port ${PORT}`)
+);

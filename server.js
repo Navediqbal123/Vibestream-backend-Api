@@ -1,4 +1,4 @@
-// server.js — final working version for Vibestream Backend
+// server.js — Final working version for Vibestream Backend
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
@@ -32,7 +32,7 @@ app.use((req, res, next) => {
 });
 
 app.get("/", (_req, res) =>
-  res.send("🔥 Vibestream backend is live — endpoints: /env /ping /feed /trending")
+  res.send("🔥 Vibestream backend live — endpoints: /env /ping /feed /trending /auto-feed")
 );
 
 /* 1️⃣ /env -> check environment variables */
@@ -96,7 +96,36 @@ app.get("/trending", async (req, res) => {
   }
 });
 
-/* 5️⃣ /test-supabase -> test database connection */
+/* 5️⃣ /auto-feed -> safe auto YouTube Shorts feed (main use in frontend) */
+app.get("/auto-feed", async (req, res) => {
+  try {
+    const topic = req.query.topic || "trending shorts";
+    const region = (req.query.region || "IN").toUpperCase();
+
+    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoDuration=short&maxResults=15&q=${encodeURIComponent(
+      topic
+    )}&regionCode=${region}&key=${YT_API_KEY}`;
+
+    const r = await fetch(url);
+    const j = await r.json();
+
+    if (j.error) throw new Error(j.error.message);
+
+    const videos = (j.items || []).map((v) => ({
+      videoId: v.id.videoId,
+      title: v.snippet.title,
+      channel: v.snippet.channelTitle,
+      thumbnail: v.snippet.thumbnails.high.url,
+      publishedAt: v.snippet.publishedAt,
+    }));
+
+    res.json({ ok: true, count: videos.length, items: videos });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* 6️⃣ /test-supabase -> test database connection */
 app.get("/test-supabase", async (req, res) => {
   try {
     const { data, error, count } = await supabase

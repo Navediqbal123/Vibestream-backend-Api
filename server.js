@@ -1,4 +1,4 @@
-// server.js — Final working version for Vibestream Backend
+// ✅ Vibestream Backend — FINAL STABLE VERSION
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
@@ -17,20 +17,23 @@ const SUPABASE_KEY =
   process.env.SUPABASE_ANON_KEY ||
   "";
 const YT_API_KEY = process.env.YT_API_KEY || process.env.YOUTUBE_API_KEY || "";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@vibestream.com";
+const ADMIN_PASS = process.env.ADMIN_PASS || "123456";
 
-console.log("🚀 STARTUP: Checking environment variables...");
-console.log(" SUPABASE_URL:", SUPABASE_URL ? "FOUND ✅" : "MISSING ❌");
-console.log(" SUPABASE_KEY:", SUPABASE_KEY ? "FOUND ✅" : "MISSING ❌");
-console.log(" YT_API_KEY:", YT_API_KEY ? "FOUND ✅" : "MISSING ❌");
+console.log("🚀 Vibestream backend starting...");
+console.log(" SUPABASE_URL:", SUPABASE_URL ? "✅ Found" : "❌ Missing");
+console.log(" SUPABASE_KEY:", SUPABASE_KEY ? "✅ Found" : "❌ Missing");
+console.log(" YT_API_KEY:", YT_API_KEY ? "✅ Found" : "❌ Missing");
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// 🔹 Middleware logger
+/* Middleware: simple logger */
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} --> ${req.method} ${req.url}`);
+  console.log(`[${new Date().toISOString()}] → ${req.method} ${req.url}`);
   next();
 });
 
+/* Root */
 app.get("/", (_req, res) =>
   res.send("🔥 Vibestream backend live — endpoints: /env /ping /feed /trending /auto-feed /admin")
 );
@@ -41,7 +44,7 @@ app.get("/env", (_req, res) => {
     SUPABASE_URL: !!SUPABASE_URL,
     SUPABASE_KEY: !!SUPABASE_KEY,
     YT_API_KEY: !!YT_API_KEY,
-    NODE_ENV: process.env.NODE_ENV || null,
+    ADMIN_EMAIL: !!ADMIN_EMAIL,
   });
 });
 
@@ -60,14 +63,14 @@ app.get("/feed", async (req, res) => {
       .order("created_at", { ascending: false })
       .limit(limit);
     if (error) throw error;
-    res.json({ items: data || [] });
+    res.json({ ok: true, items: data || [] });
   } catch (e) {
     console.error("❌ /feed error:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
-/* 4️⃣ /trending -> fetch trending shorts from YouTube */
+/* 4️⃣ /trending -> fetch trending YouTube Shorts */
 app.get("/trending", async (req, res) => {
   try {
     if (!YT_API_KEY) throw new Error("YT_API_KEY missing");
@@ -76,11 +79,11 @@ app.get("/trending", async (req, res) => {
     const q = encodeURIComponent("trending shorts");
     const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoDuration=short&maxResults=10&regionCode=${region}&q=${q}&key=${YT_API_KEY}`;
 
-    console.log("📡 Fetching trending from:", url);
     const r = await fetch(url);
     const j = await r.json();
 
     if (j.error) throw new Error(j.error.message);
+
     const items = (j.items || []).map((v) => ({
       videoId: v.id.videoId,
       title: v.snippet.title,
@@ -89,14 +92,14 @@ app.get("/trending", async (req, res) => {
       publishedAt: v.snippet.publishedAt,
     }));
 
-    res.json({ count: items.length, items });
+    res.json({ ok: true, count: items.length, items });
   } catch (e) {
     console.error("❌ /trending error:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
-/* 5️⃣ /auto-feed -> safe auto YouTube Shorts feed (main use in frontend) */
+/* 5️⃣ /auto-feed -> AI-safe auto YouTube Shorts feed */
 app.get("/auto-feed", async (req, res) => {
   try {
     const topic = req.query.topic || "trending shorts";
@@ -125,15 +128,14 @@ app.get("/auto-feed", async (req, res) => {
   }
 });
 
-/* 6️⃣ /test-supabase -> test database connection */
-app.get("/test-supabase", async (req, res) => {
+/* 6️⃣ Test Supabase connection */
+app.get("/test-supabase", async (_req, res) => {
   try {
-    const { data, error, count } = await supabase
+    const { count, error } = await supabase
       .from("videos")
-      .select("id", { count: "exact" })
-      .limit(1);
+      .select("*", { count: "exact", head: true });
     if (error) throw error;
-    res.json({ ok: true, sampleCount: data?.length || 0, totalCount: count });
+    res.json({ ok: true, totalVideos: count });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -141,40 +143,53 @@ app.get("/test-supabase", async (req, res) => {
 
 /* 7️⃣ 🔥 ADMIN PANEL ROUTES 🔥 */
 
-// Admin login
+// ✅ Admin login
 app.post("/admin/login", async (req, res) => {
   const { email, password } = req.body;
-  if (email === process.env.ADMIN_EMAIL && password === process.env.ADMIN_PASS) {
-    return res.json({ ok: true, token: "admin123" });
+  if (email === ADMIN_EMAIL && password === ADMIN_PASS) {
+    res.json({ ok: true, token: "admin-auth-token", message: "Login success ✅" });
   } else {
-    return res.status(401).json({ error: "Invalid credentials" });
+    res.status(401).json({ error: "Invalid admin credentials ❌" });
   }
 });
 
-// All users
-app.get("/admin/users", async (req, res) => {
-  const { data, error } = await supabase.from("users").select("*");
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ users: data });
+// ✅ Get all users
+app.get("/admin/users", async (_req, res) => {
+  try {
+    const { data, error } = await supabase.from("users").select("*");
+    if (error) throw error;
+    res.json({ ok: true, users: data });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-// All uploads
-app.get("/admin/uploads", async (req, res) => {
-  const { data, error } = await supabase.from("uploads").select("*");
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ uploads: data });
+// ✅ Get all uploads
+app.get("/admin/uploads", async (_req, res) => {
+  try {
+    const { data, error } = await supabase.from("uploads").select("*");
+    if (error) throw error;
+    res.json({ ok: true, uploads: data });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-// All history
-app.get("/admin/history", async (req, res) => {
-  const { data, error } = await supabase.from("history").select("*");
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ history: data });
+// ✅ Get all user history
+app.get("/admin/history", async (_req, res) => {
+  try {
+    const { data, error } = await supabase.from("history").select("*");
+    if (error) throw error;
+    res.json({ ok: true, history: data });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-/* 404 fallback */
-app.use((req, res) => res.status(404).json({ error: "Route not found" }));
+/* 🧱 Fallback for unknown routes */
+app.use((_req, res) => res.status(404).json({ error: "Route not found" }));
 
+/* Start server */
 app.listen(PORT, "0.0.0.0", () =>
   console.log(`✅ Vibestream backend running on port ${PORT}`)
 );

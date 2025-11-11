@@ -1,4 +1,4 @@
-// ✅ Vibestream Backend — FINAL HARD-CODED ADMIN VERSION (with admin test route)
+// ✅ Vibestream Backend — FINAL COMPLETE ADMIN VERSION
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
@@ -18,7 +18,7 @@ const SUPABASE_KEY =
   "";
 const YT_API_KEY = process.env.YT_API_KEY || process.env.YOUTUBE_API_KEY || "";
 
-// ✅ Hard-coded admin credentials (Render env ke bina bhi chalega)
+// ✅ Hard-coded admin credentials
 const ADMIN_EMAIL = "vibeadmin@stream.ai";
 const ADMIN_PASS = "Stream@999";
 
@@ -149,18 +149,20 @@ app.post("/admin/login", (req, res) => {
   }
 });
 
-// ✅ Test Admin route (GET)
-app.get("/admin/test", (_req, res) => {
-  res.json({
-    ok: true,
-    adminEmail: ADMIN_EMAIL,
-    adminPass: ADMIN_PASS,
-    message: "Hardcoded admin active ✅",
-  });
-});
+// Middleware for token check
+const verifyAdmin = (req, res, next) => {
+  const auth = req.headers.authorization || "";
+  if (auth === "Bearer admin-auth-token") return next();
+  res.status(403).json({ error: "Unauthorized ❌" });
+};
 
-// Admin users
-app.get("/admin/users", async (_req, res) => {
+// Test route
+app.get("/admin/test", (_req, res) =>
+  res.json({ ok: true, message: "Hardcoded admin active ✅" })
+);
+
+// Get users
+app.get("/admin/users", verifyAdmin, async (_req, res) => {
   try {
     const { data, error } = await supabase.from("users").select("*");
     if (error) throw error;
@@ -170,8 +172,8 @@ app.get("/admin/users", async (_req, res) => {
   }
 });
 
-// Admin uploads
-app.get("/admin/uploads", async (_req, res) => {
+// Get uploads
+app.get("/admin/uploads", verifyAdmin, async (_req, res) => {
   try {
     const { data, error } = await supabase.from("uploads").select("*");
     if (error) throw error;
@@ -181,12 +183,39 @@ app.get("/admin/uploads", async (_req, res) => {
   }
 });
 
-// Admin history
-app.get("/admin/history", async (_req, res) => {
+// Get history
+app.get("/admin/history", verifyAdmin, async (_req, res) => {
   try {
     const { data, error } = await supabase.from("history").select("*");
     if (error) throw error;
     res.json({ ok: true, history: data });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* ✅ NEW: Admin Create Plan */
+app.post("/admin/create-plan", verifyAdmin, async (req, res) => {
+  try {
+    const { name, price, duration } = req.body;
+    if (!name || !price || !duration)
+      return res.status(400).json({ error: "Missing fields ❌" });
+
+    const { data, error } = await supabase.from("plans").insert([{ name, price, duration }]);
+    if (error) throw error;
+
+    res.json({ ok: true, message: "Plan created ✅", plan: data[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* ✅ NEW: Get All Plans */
+app.get("/admin/plans", verifyAdmin, async (_req, res) => {
+  try {
+    const { data, error } = await supabase.from("plans").select("*");
+    if (error) throw error;
+    res.json({ ok: true, plans: data });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

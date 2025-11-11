@@ -32,7 +32,7 @@ app.use((req, res, next) => {
 });
 
 app.get("/", (_req, res) =>
-  res.send("🔥 Vibestream backend live — endpoints: /env /ping /feed /trending /auto-feed")
+  res.send("🔥 Vibestream backend live — endpoints: /env /ping /feed /trending /auto-feed /admin")
 );
 
 /* 1️⃣ /env -> check environment variables */
@@ -137,6 +137,39 @@ app.get("/test-supabase", async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+/* 7️⃣ 🔥 ADMIN PANEL ROUTES 🔥 */
+
+// Admin login
+app.post("/admin/login", async (req, res) => {
+  const { email, password } = req.body;
+  if (email === process.env.ADMIN_EMAIL && password === process.env.ADMIN_PASS) {
+    return res.json({ ok: true, token: "admin123" });
+  } else {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+});
+
+// All users
+app.get("/admin/users", async (req, res) => {
+  const { data, error } = await supabase.from("users").select("*");
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ users: data });
+});
+
+// All uploads
+app.get("/admin/uploads", async (req, res) => {
+  const { data, error } = await supabase.from("uploads").select("*");
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ uploads: data });
+});
+
+// All history
+app.get("/admin/history", async (req, res) => {
+  const { data, error } = await supabase.from("history").select("*");
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ history: data });
 });
 
 /* 404 fallback */

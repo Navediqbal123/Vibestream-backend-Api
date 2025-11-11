@@ -1,4 +1,4 @@
-// ✅ Vibestream Backend — FINAL HARD-CODED ADMIN VERSION
+// ✅ Vibestream Backend — FINAL HARD-CODED ADMIN VERSION (with admin test route)
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
@@ -147,6 +147,16 @@ app.post("/admin/login", (req, res) => {
   } else {
     res.status(401).json({ error: "Invalid admin credentials ❌" });
   }
+});
+
+// ✅ Test Admin route (GET)
+app.get("/admin/test", (_req, res) => {
+  res.json({
+    ok: true,
+    adminEmail: ADMIN_EMAIL,
+    adminPass: ADMIN_PASS,
+    message: "Hardcoded admin active ✅",
+  });
 });
 
 // Admin users

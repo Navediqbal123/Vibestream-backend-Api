@@ -1,4 +1,4 @@
-// ✅ Vibestream Backend — FINAL STABLE VERSION
+// ✅ Vibestream Backend — FINAL STABLE VERSION (with Admin Debug)
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
@@ -24,6 +24,10 @@ console.log("🚀 Vibestream backend starting...");
 console.log(" SUPABASE_URL:", SUPABASE_URL ? "✅ Found" : "❌ Missing");
 console.log(" SUPABASE_KEY:", SUPABASE_KEY ? "✅ Found" : "❌ Missing");
 console.log(" YT_API_KEY:", YT_API_KEY ? "✅ Found" : "❌ Missing");
+
+// 🧠 Debug patch to confirm admin credentials from Render env
+console.log("🛠️ DEBUG → ADMIN_EMAIL:", ADMIN_EMAIL);
+console.log("🛠️ DEBUG → ADMIN_PASS:", ADMIN_PASS);
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -149,6 +153,7 @@ app.post("/admin/login", async (req, res) => {
   if (email === ADMIN_EMAIL && password === ADMIN_PASS) {
     res.json({ ok: true, token: "admin-auth-token", message: "Login success ✅" });
   } else {
+    console.error("❌ Invalid credentials attempt:", email, password);
     res.status(401).json({ error: "Invalid admin credentials ❌" });
   }
 });
